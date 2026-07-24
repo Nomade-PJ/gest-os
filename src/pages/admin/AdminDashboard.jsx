@@ -31,18 +31,6 @@ const formatDate = value => {
   return new Date(value).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
-// O nome salvo costuma vir com o sufixo " - Organização" (gerado automaticamente
-// no cadastro). Pra confirmação de exclusão, pedimos só o nome de verdade da
-// empresa — mais fácil de digitar/colar, sem perder a segurança de ter que
-// confirmar o nome certo.
-const getConfirmName = org => (org?.name || "").replace(/\s*-\s*Organiza[cç][aã]o\s*$/i, "").trim();
-
-const daysUntil = dateStr => {
-  if (!dateStr) return null;
-  const diffMs = new Date(dateStr).getTime() - Date.now();
-  return Math.max(0, Math.ceil(diffMs / 86400000));
-};
-
 const endOfDayISO = dateStr => {
   if (!dateStr) return null;
   return new Date(`${dateStr}T23:59:59`).toISOString();
@@ -78,9 +66,6 @@ const AdminDashboard = () => {
   const [sendingMagicLink, setSendingMagicLink] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [restoring, setRestoring] = useState(false);
-  const [hardDeleting, setHardDeleting] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [messageTitle, setMessageTitle] = useState("");
   const [messageBody, setMessageBody] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -89,7 +74,7 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.from("organizations").select(`
-          id, name, is_suspended, suspended_reason, created_at, deleted_at, purge_after,
+          id, name, is_suspended, suspended_reason, created_at,
           profiles ( id, name, email, last_login_at ),
           subscriptions ( id, status, plan, current_period_end, manually_adjusted_until, admin_notes )
         `).order("created_at", { ascending: false });
@@ -147,7 +132,6 @@ const AdminDashboard = () => {
     setPlanNotes(sub?.admin_notes || "");
     setMessageTitle("");
     setMessageBody("");
-    setDeleteConfirmText("");
   };
 
   const closeManageDialog = () => {
@@ -260,7 +244,14 @@ const AdminDashboard = () => {
       const { data, error } = await supabase.functions.invoke("admin-actions", {
         body: { action: "resend_invite", email, companyName: managingOrg.name }
       });
-      if (error) throw error;
+      if (error) {
+        let detail = error.message;
+        try {
+          const body = await error.context.json();
+          if (body?.error) detail = body.error;
+        } catch {}
+        throw new Error(detail);
+      }
       if (data?.error) throw new Error(data.error);
       await logAction("resend_invite", managingOrg.id, managingOrg.profiles?.[0]?.id, `E-mail: ${email}`);
       toast.success(`Convite reenviado para ${email}`);
@@ -295,77 +286,45 @@ const AdminDashboard = () => {
     }
   };
 
-  // Marca a organização para exclusão definitiva em 30 dias (não apaga nada
-  // ainda — dá pra restaurar até lá). Toda a lógica de segurança e o registro
-  // no log de auditoria acontecem dentro da função do banco.
-  const handleSoftDelete = async () => {
-    if (!managingOrg?.id) return;
-    if (deleteConfirmText !== getConfirmName(managingOrg)) {
+  const handleDeleteAccount = async () => {
+    const targetUserId = managingOrg?.profiles?.[0]?.id;
+    if (!targetUserId || !managingOrg?.id) {
+      toast.error("Não foi possível identificar esta conta");
+      return;
+    }
+    if (deleteConfirmText !== managingOrg.name) {
       toast.error("Digite o nome da empresa exatamente igual para confirmar");
       return;
     }
     setDeleting(true);
     try {
-      const { data, error } = await supabase.rpc("admin_soft_delete_organization", { p_org_id: managingOrg.id });
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data.error || "Erro desconhecido");
-      toast.success("Marcado para exclusão — pode ser restaurado em até 30 dias");
+      // Registra a ação ANTES de apagar (depois não vai existir mais organização pra vincular)
+      await logAction("delete_account", managingOrg.id, targetUserId, `Empresa: ${managingOrg.name}`);
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: {
+          action: "delete_account",
+          targetUserId,
+          targetOrganizationId: managingOrg.id
+        }
+      });
+      if (error) {
+        let detail = error.message;
+        try {
+          const body = await error.context.json();
+          if (body?.error) detail = body.error;
+        } catch {}
+        throw new Error(detail);
+      }
+      if (data?.error) throw new Error(data.error);
+      toast.success("Conta excluída permanentemente");
       setDeleteConfirmText("");
       closeManageDialog();
       fetchOrganizations();
     } catch (error) {
-      console.error("Erro ao marcar para exclusão:", error);
-      toast.error("Não foi possível marcar para exclusão", { description: error.message });
+      console.error("Erro ao excluir conta:", error);
+      toast.error("Não foi possível excluir a conta", { description: error.message });
     } finally {
       setDeleting(false);
-    }
-  };
-
-  // Restaura uma organização que ainda está dentro do prazo de 30 dias.
-  const handleRestore = async org => {
-    setRestoring(true);
-    try {
-      const { data, error } = await supabase.rpc("admin_restore_organization", { p_org_id: org.id });
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data.error || "Erro desconhecido");
-      toast.success("Organização restaurada");
-      fetchOrganizations();
-    } catch (error) {
-      console.error("Erro ao restaurar:", error);
-      toast.error("Não foi possível restaurar", { description: error.message });
-    } finally {
-      setRestoring(false);
-    }
-  };
-
-  // Exclusão definitiva imediata, pulando os 30 dias — só aparece pra quem já
-  // está marcado para exclusão, como opção extra pra casos excepcionais.
-  const handleHardDeleteNow = async org => {
-    if (!window.confirm(`Excluir "${getConfirmName(org)}" AGORA MESMO, sem esperar os 30 dias? Isso não pode ser desfeito de jeito nenhum.`)) {
-      return;
-    }
-    setHardDeleting(true);
-    try {
-      const { data, error } = await supabase.rpc("admin_hard_delete_organization_now", { p_org_id: org.id });
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data.error || "Erro desconhecido");
-      toast.success("Excluído definitivamente");
-      fetchOrganizations();
-    } catch (error) {
-      console.error("Erro ao excluir definitivamente:", error);
-      toast.error("Não foi possível excluir", { description: error.message });
-    } finally {
-      setHardDeleting(false);
-    }
-  };
-
-  const handleCopyConfirmName = async org => {
-    try {
-      await navigator.clipboard.writeText(getConfirmName(org));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("Não foi possível copiar");
     }
   };
 
@@ -381,8 +340,7 @@ const AdminDashboard = () => {
   const stats = {
     total: organizations.length,
     active: organizations.filter(o => o.subscriptions?.[0]?.status === "active" && !o.is_suspended).length,
-    suspended: organizations.filter(o => o.is_suspended && !o.deleted_at).length,
-    inTrash: organizations.filter(o => o.deleted_at).length,
+    suspended: organizations.filter(o => o.is_suspended).length,
     newThisMonth: organizations.filter(o => new Date(o.created_at) >= startOfMonth).length
   };
 
@@ -396,12 +354,11 @@ const AdminDashboard = () => {
         <p className="text-slate-400 text-sm mt-1">{organizations.length} organizações cadastradas</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard icon={Building2} label="Total de clientes" value={stats.total} accent="bg-blue-500/15 text-blue-400" />
         <StatCard icon={CheckCircle2} label="Assinaturas ativas" value={stats.active} accent="bg-green-500/15 text-green-400" />
         <StatCard icon={Ban} label="Suspensos" value={stats.suspended} accent="bg-red-500/15 text-red-400" />
-        <StatCard icon={Trash2} label="Na lixeira" value={stats.inTrash} accent="bg-amber-500/15 text-amber-400" />
-        <StatCard icon={UserPlus} label="Novos este mês" value={stats.newThisMonth} accent="bg-purple-500/15 text-purple-400" />
+        <StatCard icon={UserPlus} label="Novos este mês" value={stats.newThisMonth} accent="bg-amber-500/15 text-amber-400" />
       </div>
 
       <div className="relative max-w-sm">
@@ -428,9 +385,7 @@ const AdminDashboard = () => {
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-                    {org.deleted_at ? (
-                      <Badge className="bg-amber-500/15 text-amber-400">Exclusão em {daysUntil(org.purge_after)}d</Badge>
-                    ) : org.is_suspended && <Badge className="bg-red-500/15 text-red-400">Suspenso</Badge>}
+                    {org.is_suspended && <Badge className="bg-red-500/15 text-red-400">Suspenso</Badge>}
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-800 pt-2">
@@ -444,16 +399,9 @@ const AdminDashboard = () => {
                     <Settings2 className="h-3.5 w-3.5 mr-1.5" />
                     Gerenciar
                   </Button>
-                  {org.deleted_at ? (
-                    <Button size="sm" disabled={restoring} onClick={() => handleRestore(org)} className="flex-1 bg-slate-800 border border-green-800 text-green-400 hover:bg-green-950">
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                      Restaurar
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" disabled={processingId === org.id} onClick={() => toggleSuspend(org)} className={org.is_suspended ? "flex-1 bg-slate-800 border-green-800 text-green-400 hover:bg-green-950" : "flex-1 bg-slate-800 border-red-800 text-red-400 hover:bg-red-950"}>
-                      {org.is_suspended ? (<><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Reativar</>) : (<><Ban className="h-3.5 w-3.5 mr-1.5" />Suspender</>)}
-                    </Button>
-                  )}
+                  <Button size="sm" variant="outline" disabled={processingId === org.id} onClick={() => toggleSuspend(org)} className={org.is_suspended ? "flex-1 bg-slate-800 border-green-800 text-green-400 hover:bg-green-950" : "flex-1 bg-slate-800 border-red-800 text-red-400 hover:bg-red-950"}>
+                    {org.is_suspended ? (<><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Reativar</>) : (<><Ban className="h-3.5 w-3.5 mr-1.5" />Suspender</>)}
+                  </Button>
                 </div>
               </Card>
             );
@@ -493,9 +441,7 @@ const AdminDashboard = () => {
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-                        {org.deleted_at ? (
-                          <Badge className="bg-amber-500/15 text-amber-400">Exclusão em {daysUntil(org.purge_after)}d</Badge>
-                        ) : org.is_suspended && <Badge className="bg-red-500/15 text-red-400">Suspenso</Badge>}
+                        {org.is_suspended && <Badge className="bg-red-500/15 text-red-400">Suspenso</Badge>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -504,16 +450,9 @@ const AdminDashboard = () => {
                           <Settings2 className="h-3.5 w-3.5 mr-1.5" />
                           Gerenciar
                         </Button>
-                        {org.deleted_at ? (
-                          <Button size="sm" disabled={restoring} onClick={() => handleRestore(org)} className="bg-slate-800 border border-green-800 text-green-400 hover:bg-green-950">
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                            Restaurar
-                          </Button>
-                        ) : (
-                          <Button size="sm" variant="outline" disabled={processingId === org.id} onClick={() => toggleSuspend(org)} className={org.is_suspended ? "bg-slate-800 border-green-800 text-green-400 hover:bg-green-950" : "bg-slate-800 border-red-800 text-red-400 hover:bg-red-950"}>
-                            {org.is_suspended ? (<><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Reativar</>) : (<><Ban className="h-3.5 w-3.5 mr-1.5" />Suspender</>)}
-                          </Button>
-                        )}
+                        <Button size="sm" variant="outline" disabled={processingId === org.id} onClick={() => toggleSuspend(org)} className={org.is_suspended ? "bg-slate-800 border-green-800 text-green-400 hover:bg-green-950" : "bg-slate-800 border-red-800 text-red-400 hover:bg-red-950"}>
+                          {org.is_suspended ? (<><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Reativar</>) : (<><Ban className="h-3.5 w-3.5 mr-1.5" />Suspender</>)}
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -593,60 +532,22 @@ const AdminDashboard = () => {
               </Button>
             </div>
 
-            {managingOrg?.deleted_at ? (
-              <div className="border-t border-amber-900/40 pt-4 space-y-3">
-                <Label className="text-sm font-semibold text-amber-400 flex items-center gap-2">
-                  <Trash2 className="h-4 w-4" />
-                  Marcado para exclusão
-                </Label>
-                <p className="text-xs text-slate-400">
-                  Essa conta vai ser apagada definitivamente em{" "}
-                  <span className="text-amber-300 font-semibold">{daysUntil(managingOrg.purge_after)} dia(s)</span>.
-                  Até lá, dá pra restaurar o acesso normalmente.
-                </p>
-                <Button size="sm" onClick={() => handleRestore(managingOrg)} disabled={restoring} className="w-full bg-green-900/40 border border-green-800 text-green-300 hover:bg-green-900/60">
-                  {restoring ? "Restaurando..." : "Restaurar esta conta"}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => handleHardDeleteNow(managingOrg)}
-                  disabled={hardDeleting}
-                  className="text-xs text-red-500/70 hover:text-red-400 underline underline-offset-2 block mx-auto"
-                >
-                  {hardDeleting ? "Excluindo..." : "Excluir definitivamente agora, sem esperar"}
-                </button>
-              </div>
-            ) : (
-              <div className="border-t border-red-900/40 pt-4 space-y-3">
-                <Label className="text-sm font-semibold text-red-400 flex items-center gap-2">
-                  <Trash2 className="h-4 w-4" />
-                  Excluir conta
-                </Label>
-                <p className="text-xs text-slate-400">
-                  A conta fica marcada para exclusão e some do uso normal, mas os dados só são apagados de vez
-                  depois de <span className="text-slate-300">30 dias</span> — até lá dá pra restaurar. Depois desse
-                  prazo, não tem mais volta.
-                </p>
-                <p className="text-xs text-slate-300 flex items-center gap-1.5 flex-wrap">
-                  Digite
-                  <span className="font-mono font-semibold text-white bg-slate-800 px-1.5 py-0.5 rounded">
-                    {getConfirmName(managingOrg)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyConfirmName(managingOrg)}
-                    className="text-slate-400 hover:text-white underline underline-offset-2"
-                  >
-                    {copied ? "copiado!" : "copiar"}
-                  </button>
-                  para confirmar:
-                </p>
-                <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="Nome da empresa" className="bg-slate-800 border-red-900/40 text-slate-100" />
-                <Button size="sm" variant="destructive" onClick={handleSoftDelete} disabled={deleting || deleteConfirmText !== getConfirmName(managingOrg)} className="w-full">
-                  {deleting ? "Processando..." : "Marcar para exclusão"}
-                </Button>
-              </div>
-            )}
+            <div className="border-t border-red-900/40 pt-4 space-y-3">
+              <Label className="text-sm font-semibold text-red-400 flex items-center gap-2">
+                <Trash2 className="h-4 w-4" />
+                Excluir conta permanentemente
+              </Label>
+              <p className="text-xs text-slate-400">
+                Apaga a conta, a empresa e TODOS os dados (clientes, dispositivos, ordens de serviço, assinatura) do banco de dados. Essa ação não pode ser desfeita.
+              </p>
+              <p className="text-xs text-slate-300">
+                Digite <span className="font-mono font-semibold text-white">{managingOrg?.name}</span> para confirmar:
+              </p>
+              <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="Digite o nome da empresa" className="bg-slate-800 border-red-900/40 text-slate-100" />
+              <Button size="sm" variant="destructive" onClick={handleDeleteAccount} disabled={deleting || deleteConfirmText !== managingOrg?.name} className="w-full">
+                {deleting ? "Excluindo..." : "Excluir conta e todos os dados"}
+              </Button>
+            </div>
           </div>
 
           <DialogFooter>

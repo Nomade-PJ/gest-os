@@ -134,7 +134,18 @@ const Leads = () => {
       const { data, error } = await supabase.functions.invoke("search-leads", {
         body: { city: searchCity.trim() }
       });
-      if (error) throw error;
+      if (error) {
+        // supabase-js esconde o corpo real da resposta atrás de um erro
+        // genérico ("non-2xx status code") — pegamos o corpo de verdade aqui.
+        let detail = error.message;
+        try {
+          const body = await error.context.json();
+          if (body?.error) detail = body.error;
+        } catch {
+          // corpo não veio em JSON, mantém a mensagem genérica
+        }
+        throw new Error(detail);
+      }
       if (data?.error) throw new Error(data.error);
       setSearchResults(data.results || []);
       if (!data.results?.length) toast.info("Nenhum resultado encontrado para essa cidade");
