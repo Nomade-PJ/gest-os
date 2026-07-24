@@ -1,0 +1,395 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* === Core Palette === */
+    --background: 210 40% 98%;        /* #F8FAFC */
+    --foreground: 222 47% 11%;        /* #111827 */
+
+    --card: 0 0% 100%;                /* #FFFFFF */
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Signal blue - deliberately off the textbook Tailwind blue-600 */
+    --primary: 211 82% 44%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Muted gray */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 9% 46%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;   /* #6B7280 */
+
+    --accent: 211 82% 96%;
+    --accent-foreground: 211 82% 30%;
+
+    --destructive: 0 84% 60%;         /* #EF4444 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;            /* #E5E7EB */
+    --input: 220 13% 91%;
+    --ring: 211 82% 44%;
+
+    --radius: 0.625rem;
+
+    /* === Sidebar === */
+    --sidebar-background: 222 47% 9%;      /* #0F172A */
+    --sidebar-foreground: 215 28% 72%;
+    --sidebar-foreground-active: 0 0% 100%;
+    --sidebar-primary: 211 82% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 223 47% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 223 47% 14%;
+    --sidebar-ring: 211 82% 44%;
+
+    /* === Shadows === */
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.07);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.05);
+  }
+
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 211 82% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 223 47% 14%;
+    --secondary-foreground: 215 28% 72%;
+
+    --muted: 223 47% 13%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 211 82% 18%;
+    --accent-foreground: 211 82% 78%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 223 47% 16%;
+    --input: 223 47% 16%;
+    --ring: 211 82% 56%;
+
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 215 28% 65%;
+    --sidebar-accent: 223 47% 12%;
+    --sidebar-border: 223 47% 12%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
+  /* Focus states */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Headings */
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-foreground font-semibold tracking-tight;
+  }
+}
+
+/* =====================
+   ANIMATIONS
+   ===================== */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
+  70%  { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to   { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to   { height: 0; }
+}
+
+/* =====================
+   UTILITY CLASSES
+   ===================== */
+@layer utilities {
+  .animate-fade-in        { animation: fade-in 0.2s ease forwards; }
+  .animate-fade-in-up     { animation: fade-in-up 0.3s ease forwards; }
+  .animate-fade-in-down   { animation: fade-in-down 0.25s ease forwards; }
+  .animate-slide-in-left  { animation: slide-in-left 0.3s ease forwards; }
+  .animate-scale-in       { animation: scale-in 0.2s ease forwards; }
+  .animate-pulse-ring     { animation: pulse-ring 2s infinite; }
+
+  /* Stagger delays */
+  .delay-50  { animation-delay: 50ms; }
+  .delay-100 { animation-delay: 100ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-250 { animation-delay: 250ms; }
+  .delay-300 { animation-delay: 300ms; }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Glass effect */
+  .glass {
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    background-color: hsl(var(--card) / 0.85);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* Cartão padrão de conteúdo */
+  .card-surface {
+    @apply bg-card border border-border rounded-xl;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .card-surface:hover {
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Subtle gradient background */
+  .bg-gradient-subtle {
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(221 83% 98%) 100%);
+  }
+
+  /* Text truncate multi-line */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* =====================
+   SIDEBAR STYLES
+   ===================== */
+.sidebar-nav-item {
+  @apply relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer select-none;
+  color: hsl(var(--sidebar-foreground));
+}
+
+.sidebar-nav-item:hover {
+  background-color: hsl(var(--sidebar-accent));
+  color: hsl(0 0% 100%);
+}
+
+.sidebar-nav-item.active {
+  background-color: hsl(var(--primary));
+  color: hsl(0 0% 100%);
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.35);
+}
+
+.sidebar-nav-item .nav-icon {
+  @apply flex-shrink-0 w-4 h-4;
+  transition: transform 0.15s ease;
+}
+
+.sidebar-nav-item:hover .nav-icon {
+  transform: scale(1.1);
+}
+
+/* =====================
+   BOTTOM NAV (Mobile)
+   ===================== */
+.bottom-nav {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background-color: hsl(var(--sidebar-background) / 0.95);
+  border: 1px solid hsl(var(--sidebar-border) / 0.5);
+  box-shadow: 0 -4px 24px rgb(0 0 0 / 0.15), 0 0 0 1px hsl(var(--sidebar-border) / 0.3);
+}
+
+.bottom-nav-item {
+  @apply relative flex flex-col items-center justify-center gap-1 rounded-xl;
+  transition: all 0.15s ease;
+}
+
+.bottom-nav-item:active {
+  transform: scale(0.93);
+}
+
+.nav-item-ripple {
+  @apply absolute inset-0 rounded-xl;
+  pointer-events: none;
+}
+
+/* =====================
+   PAGE TRANSITIONS
+   ===================== */
+.page-enter {
+  animation: fade-in-up 0.25s ease forwards;
+}
+
+/* =====================
+   FORM STYLES
+   ===================== */
+.form-input-icon {
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4;
+}
+
+.form-input-with-icon {
+  @apply pl-10;
+}
+
+/* =====================
+   TABLE STYLES
+   ===================== */
+.table-row-hover {
+  @apply transition-colors duration-100;
+}
+
+.table-row-hover:hover {
+  @apply bg-muted/50 cursor-pointer;
+}
+
+/* =====================
+   LANDING / LOGIN
+   ===================== */
+.login-gradient-bg {
+  background:
+    radial-gradient(ellipse at 20% 50%, hsl(221 83% 53% / 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, hsl(243 75% 59% / 0.06) 0%, transparent 50%),
+    hsl(var(--background));
+}
+
+.enter-button {
+  background: linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(221 83% 45%) 100%);
+  box-shadow: 0 4px 14px hsl(221 83% 53% / 0.4);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.enter-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px hsl(221 83% 53% / 0.5);
+}
+
+.enter-button:active {
+  transform: translateY(0);
+}
+
+.pulse-animation {
+  animation: pulse-ring 2s infinite;
+}
+
+/* =====================
+   MISC
+   ===================== */
+.landing-page {
+  font-family: 'Inter', sans-serif;
+  @apply bg-sidebar text-sidebar-foreground;
+}
+
+.feature-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  backdrop-filter: blur(4px);
+  background-color: hsl(var(--sidebar-accent) / 0.8);
+  border: 1px solid hsl(var(--sidebar-border) / 0.5);
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.2);
+}
+
+@media (min-width: 768px) {
+  .bottom-nav {
+    max-width: 480px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
